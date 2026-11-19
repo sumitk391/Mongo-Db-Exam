@@ -1,0 +1,240 @@
+========================================================================
+CAFE DATABASE — SETUP
+========================================================================
+
+// Setup: cafeDB.orders
+use cafeDB
+
+// start clean so the script can be re-run
+db.orders.drop()
+
+db.orders.insertMany([
+  { _id: 1, customer: "Meena",   item: "Coffee",   qty: 2, price: 120, status: "delivered" },
+  { _id: 2, customer: "Ravi",    item: "Sandwich", qty: 1, price: 180, status: "delivered" },
+  { _id: 3, customer: "Meena",   item: "Sandwich", qty: 2, price: 180, status: "cancelled" },
+  { _id: 4, customer: "Karthik", item: "Coffee",   qty: 3, price: 120, status: "delivered" },
+  { _id: 5, customer: "Ravi",    item: "Coffee",   qty: 1, price: 120, status: "delivered" },
+  { _id: 6, customer: "Meena",   item: "Cake",     qty: 1, price: 250, status: "delivered" },
+  { _id: 7, customer: "Karthik", item: "Cake",     qty: 2, price: 250, status: "pending" }
+])
+
+
+========================================================================
+CAFE DATABASE — TASK 1: COUNT ORDERS BY STATUS
+========================================================================
+
+// Task 1: Count orders by status (most orders first)
+use cafeDB
+
+db.orders.aggregate([
+  { $group: { _id: "$status", count: { $sum: 1 } } },
+  // secondary sort on _id keeps ties (cancelled / pending) in a stable order
+  { $sort: { count: -1, _id: 1 } }
+])
+
+// Expected output:
+// [
+//   { _id: 'delivered', count: 5 },
+//   { _id: 'cancelled', count: 1 },
+//   { _id: 'pending',   count: 1 }
+// ]
+
+
+========================================================================
+CAFE DATABASE — TASK 2: MATCH AND PROJECT
+========================================================================
+
+// Task 2: Filter with $match and shape with $project
+// Only delivered orders; show just customer, item and qty (hide _id)
+use cafeDB
+
+db.orders.aggregate([
+  { $match: { status: "delivered" } },
+  { $project: { _id: 0, customer: 1, item: 1, qty: 1 } }
+])
+
+// Expected output:
+// [
+//   { customer: 'Meena',   item: 'Coffee',   qty: 2 },
+//   { customer: 'Ravi',    item: 'Sandwich', qty: 1 },
+//   { customer: 'Karthik', item: 'Coffee',   qty: 3 },
+//   { customer: 'Ravi',    item: 'Coffee',   qty: 1 },
+//   { customer: 'Meena',   item: 'Cake',     qty: 1 }
+// ]
+
+
+========================================================================
+CAFE DATABASE — TASK 3: REVENUE PER ITEM
+========================================================================
+
+// Task 3: Revenue per item (delivered orders only, highest revenue first)
+use cafeDB
+
+db.orders.aggregate([
+  { $match: { status: "delivered" } },
+  { $group: {
+      _id: "$item",
+      totalQty: { $sum: "$qty" },
+      revenue:  { $sum: { $multiply: ["$qty", "$price"] } }
+  } },
+  { $sort: { revenue: -1 } }
+])
+
+// Expected output:
+// [
+//   { _id: 'Coffee',   totalQty: 6, revenue: 720 },
+//   { _id: 'Cake',     totalQty: 1, revenue: 250 },
+//   { _id: 'Sandwich', totalQty: 1, revenue: 180 }
+// ]
+//
+// Check: Coffee = (2 + 3 + 1) = 6 cups x 120 = 720
+
+
+========================================================================
+CAFE DATABASE — TASK 4: SPEND PER CUSTOMER
+========================================================================
+
+// Task 4: Spend per customer (delivered orders only, biggest spender first)
+// $project renames _id to customer
+use cafeDB
+
+db.orders.aggregate([
+  { $match: { status: "delivered" } },
+  { $group: {
+      _id: "$customer",
+      orders: { $sum: 1 },
+      totalSpend: { $sum: { $multiply: ["$qty", "$price"] } }
+  } },
+  { $sort: { totalSpend: -1 } },
+  { $project: { _id: 0, customer: "$_id", orders: 1, totalSpend: 1 } }
+])
+
+// Expected output:
+// [
+//   { customer: 'Meena',   orders: 2, totalSpend: 490 },
+//   { customer: 'Karthik', orders: 1, totalSpend: 360 },
+//   { customer: 'Ravi',    orders: 2, totalSpend: 300 }
+// ]
+
+
+========================================================================
+CAFE DATABASE — TASK 5: BEST CUSTOMER
+========================================================================
+
+// Task 5: Find the best customer
+// Same report as Task 4, but keep only the top spender with $limit: 1
+use cafeDB
+
+db.orders.aggregate([
+  { $match: { status: "delivered" } },
+  { $group: {
+      _id: "$customer",
+      totalSpend: { $sum: { $multiply: ["$qty", "$price"] } }
+  } },
+  { $sort: { totalSpend: -1 } },
+  { $limit: 1 }
+])
+
+// Expected output:
+// [ { _id: 'Meena', totalSpend: 490 } ]
+
+
+========================================================================
+LIBRARY DATABASE — SETUP
+========================================================================
+
+// Setup: cafeDB.orders
+use cafeDB
+
+// start clean so the script can be re-run
+db.orders.drop()
+
+db.orders.insertMany([
+  { _id: 1, customer: "Meena",   item: "Coffee",   qty: 2, price: 120, status: "delivered" },
+  { _id: 2, customer: "Ravi",    item: "Sandwich", qty: 1, price: 180, status: "delivered" },
+  { _id: 3, customer: "Meena",   item: "Sandwich", qty: 2, price: 180, status: "cancelled" },
+  { _id: 4, customer: "Karthik", item: "Coffee",   qty: 3, price: 120, status: "delivered" },
+  { _id: 5, customer: "Ravi",    item: "Coffee",   qty: 1, price: 120, status: "delivered" },
+  { _id: 6, customer: "Meena",   item: "Cake",     qty: 1, price: 250, status: "delivered" },
+  { _id: 7, customer: "Karthik", item: "Cake",     qty: 2, price: 250, status: "pending" }
+])
+
+
+========================================================================
+LIBRARY DATABASE — TASK 1: ADD COPIES WITH $INC
+========================================================================
+
+// Task 1: Add copies with $inc
+// Two new copies of "Operating Systems" arrived
+use libraryDB
+
+db.books.updateOne(
+  { title: "Operating Systems" },
+  { $inc: { copies: 2 } }
+)
+
+// Expected output:
+// matchedCount: 1, modifiedCount: 1
+// Copies of Operating Systems change from 3 to 5.
+
+
+========================================================================
+LIBRARY DATABASE — TASK 2: REDUCE COPIES WHEN BORROWED
+========================================================================
+
+// Task 2: Reduce copies when a book is borrowed
+// $inc with a negative value subtracts
+use libraryDB
+
+db.books.updateOne(
+  { title: "Database Systems" },
+  { $inc: { copies: -1 } }
+)
+
+// Expected output:
+// modifiedCount: 1
+// Copies of Database Systems change from 5 to 4.
+
+
+========================================================================
+LIBRARY DATABASE — TASK 3: UPSERT
+========================================================================
+
+// Task 3: Upsert
+// Update "Artificial Intelligence" if it exists, otherwise insert it.
+// The title of the new document comes from the filter.
+use libraryDB
+
+// --- First run ---
+db.books.updateOne(
+  { title: "Artificial Intelligence" },
+  { $set: { author: "Russell", copies: 4, status: "available" } },
+  { upsert: true }
+)
+
+// First run - no matching book exists, so a new document is inserted:
+// {
+//   acknowledged: true,
+//   insertedId: ObjectId('...'),
+//   matchedCount: 0, modifiedCount: 0, upsertedCount: 1
+// }
+
+
+// --- Second run (exact same command) ---
+db.books.updateOne(
+  { title: "Artificial Intelligence" },
+  { $set: { author: "Russell", copies: 4, status: "available" } },
+  { upsert: true }
+)
+
+// Second run - the book now exists and nothing needs to change,
+// so no duplicate is created:
+// {
+//   acknowledged: true,
+//   insertedId: null,
+//   matchedCount: 1, modifiedCount: 0, upsertedCount: 0
+// }
+
+// Comparison:
+//   1st run: matched 0, modified 0, upserted 1  -> document inserted
+//   2nd run: matched 1, modified 0, upserted 0  -> found, values identical, no change
